@@ -2,7 +2,9 @@ var express = require('express');
 var util = require('./lib/utility');
 var partials = require('express-partials');
 var bodyParser = require('body-parser');
-
+/* START SOLUTION */
+var session = require('express-session');
+/* END SOLUTION */
 
 var db = require('./app/config');
 var Users = require('./app/collections/users');
@@ -21,27 +23,29 @@ app.use(bodyParser.json());
 // Parse forms (signup/login)
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(express.static(__dirname + '/public'));
+/* START SOLUTION */
+app.use(session({
+  secret: 'shhh, it\'s a secret',
+  resave: false,
+  saveUninitialized: true
+}));
+/* END SOLUTION */
 
-
-app.get('/', 
-function(req, res) {
+app.get('/', util.checkUser, function(req, res) {
   res.render('index');
 });
 
-app.get('/create', 
-function(req, res) {
+app.get('/create', util.checkUser, function(req, res) {
   res.render('index');
 });
 
-app.get('/links', 
-function(req, res) {
+app.get('/links', util.checkUser, function(req, res) {
   Links.reset().fetch().then(function(links) {
     res.send(200, links.models);
   });
 });
 
-app.post('/links', 
-function(req, res) {
+app.post('/links', util.checkUser, function(req, res) {
   var uri = req.body.url;
 
   if (!util.isValidUrl(uri)) {
@@ -78,7 +82,66 @@ function(req, res) {
 // Write your authentication routes here
 /************************************************************/
 
+/* START SOLUTION */
+app.get('/login', function(req, res) {
+  res.render('login');
+});
 
+app.post('/login', function(req, res) {
+  var username = req.body.username;
+  var password = req.body.password;
+
+  new User({ username: username })
+    .fetch()
+    .then(function(user) {
+      if (!user) {
+        res.redirect('/login');
+      } else {
+        user.comparePassword(password, function(match) {
+          if (match) {
+            util.createSession(req, res, user);
+          } else {
+            res.redirect('/login');
+          }
+        });
+      }
+  });
+});
+
+app.get('/logout', function(req, res) {
+  req.session.destroy(function(){
+    res.redirect('/login');
+  });
+});
+
+app.get('/signup', function(req, res) {
+  res.render('signup');
+});
+
+app.post('/signup', function(req, res) {
+  var username = req.body.username;
+  var password = req.body.password;
+
+  new User({ username: username })
+    .fetch()
+    .then(function(user) {
+      if (!user) {
+        var newUser = new User({
+          username: username,
+          password: password
+        });
+        newUser.save()
+          .then(function(newUser) {
+            util.createSession(req, res, newUser);
+            Users.add(newUser);
+          });
+      } else {
+        console.log('Account already exists');
+        res.redirect('/signup');
+      }
+    });
+});
+/* END SOLUTION */
 
 /************************************************************/
 // Handle the wildcard route last - if all other routes fail
